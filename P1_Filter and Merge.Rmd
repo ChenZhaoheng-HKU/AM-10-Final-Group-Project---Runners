@@ -1,0 +1,119 @@
+---
+title: "Data Visualization: Final Project"
+author: "Your name goes here"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+      number_sections: true
+      highlight: zenburn
+      theme: flatly
+      toc: yes
+      toc_depth: 2
+      toc_float:
+        collapsed: false
+      fontsize: 10pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(vroom)
+library(janitor)
+library(skimr)
+library(vroom)
+library(mice) 
+library(VIM)
+library(stringr)
+```
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+# Read the CSV files
+results <- read.csv("results.csv", stringsAsFactors = FALSE)
+athlete_events <- read.csv("athlete_events.csv", stringsAsFactors = FALSE)
+```
+
+```{r}
+# Modify the two datasets to prepare for the later merge
+athlete_events <- athlete_events %>%
+  
+  distinct(Name, Year, .keep_all = TRUE) %>%
+  
+  mutate(NameSplit = str_split(Name, " "),
+         last_name = map_chr(NameSplit, function(x) x[length(x)]),
+         first_name = map_chr(NameSplit, function(x) paste(x[1], collapse = " "))) %>%
+  
+  filter(!is.na(Medal), Sport %in% c("Athletics")) %>%
+  
+  mutate(Medal = case_when(
+    Medal == "Gold" ~ "G",
+    Medal == "Silver" ~ "S",
+    Medal == "Bronze" ~ "B",
+    TRUE ~ Medal
+    )) %>%
+  
+  select(-last_name, -NameSplit)
+
+results <- results %>%
+  mutate(NameSplit = str_split(Name, " "),
+         last_name = map_chr(NameSplit, function(x) x[length(x)]),
+         first_name = map_chr(NameSplit, function(x) paste(x[1:(length(x)-1)], collapse = " "))) %>%
+  
+  select(-NameSplit)
+
+# Convert 'Name' column in both data frames to lowercase
+results$first_name<- tolower(results$first_name)
+athlete_events$first_name <- tolower(athlete_events$first_name)
+```
+
+```{r}
+# Merge the data frames on 'Name' 'Medal' and 'Year'
+combined_df <- results %>%
+  left_join(athlete_events, by = c("first_name", "Medal", "Year")) %>%
+  filter(!is.na(ID))
+```
+
+```{r}
+# 2. Convert 'Results' to Time Format
+convert_time <- function(time_str) {
+  # Split the time string by ':'
+  parts <- strsplit(time_str, ":")[[1]]
+  # Convert to time
+  if (length(parts) == 2) {
+    return(as.numeric(parts[[1]]) * 60 + as.numeric(parts[[2]]))
+  } else {
+    return(as.numeric(parts[[1]]))
+  }
+}
+
+# 3. Extract Distance from 'Event'
+extract_distance <- function(event_str) {
+  # Extract the first number from the string
+  as.numeric(str_extract(event_str, "\\d+"))
+}
+
+```
+
+```{r}
+running_events <- combined_df %>% 
+  filter(grepl("M Men|M Women", Event.x), 
+         !is.na(ID)) # Adjust the pattern as needed
+
+running_events$Time <- sapply(running_events$Result, convert_time)
+running_events$Distance <- sapply(running_events$Event.x, extract_distance)
+
+# Display the first few rows of the cleaned data
+head(running_events)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
