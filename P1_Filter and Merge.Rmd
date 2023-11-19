@@ -110,10 +110,87 @@ running_events$Distance <- sapply(running_events$Event.x, extract_distance)
 # Display the first few rows of the cleaned data
 head(running_events)
 ```
+```{r}
+# Preparing for plotting
+running_events$Height_Category <- cut(running_events$Height, 
+                                      breaks = seq(from = min(running_events$Height, na.rm = TRUE), 
+                                                   to = max(running_events$Height, na.rm = TRUE), 
+                                                   by = 5), 
+                                      include.lowest = TRUE)
 
-## Including Plots
+running_events<- running_events %>%
+  drop_na(Height_Category) %>%
+  filter(Height_Category != "NA") # Replace NA with actual NA representation in data
 
-You can also embed plots, for example:
+height_breaks <- seq(from = min(running_events$Height, na.rm = TRUE), 
+                     to = max(running_events$Height, na.rm = TRUE), 
+                     by = 5) # Adjust the 'by' parameter as needed
+height_labels <- paste(head(height_breaks, -1), tail(height_breaks, -1), sep = "-")
+
+# Now use these labels when you create the 'Height_Category'
+running_events$Height_Category <- cut(running_events$Height, 
+                                      breaks = height_breaks, 
+                                      labels = height_labels, 
+                                      include.lowest = TRUE)
+
+y_breaks <- seq(0, 7000, by = 1500)
+  
+ggplot(running_events, aes(x = Height_Category, y = Distance, fill = Gender)) +
+  geom_bar(stat = "summary", fun = "mean", position = "dodge") +
+  scale_fill_brewer(palette = "Pastel1") +
+  theme_minimal() +
+  labs(x = "Height Category (cm)", y = "Average Distance (m)",
+       title = "Taller athletes tend to run shorter distances in Olympic Events") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1),
+        legend.title = element_blank()) +
+  geom_text(aes(label = round(..y.., 0)),  # Round to the nearest whole number
+            position = position_dodge(width = 0.9),
+            stat = "summary", 
+            vjust = -0.5, 
+            fun = "mean") +
+  scale_y_continuous(breaks = y_breaks, labels = as.character(y_breaks)) +
+  coord_cartesian(ylim = c(0, max(running_events$Distance, na.rm = TRUE) * 1.1))
+
+```
+```{r}
+running_events$Weight_Category <- cut(running_events$Weight, 
+                                      breaks = seq(from = min(running_events$Weight, na.rm = TRUE), 
+                                                   to = max(running_events$Weight, na.rm = TRUE), 
+                                                   by = 5),  # Adjust the 'by' parameter as needed
+                                      include.lowest = TRUE)
+running_events <- running_events %>%
+  filter(!is.na(Weight_Category))
 
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+weight_breaks <- seq(from = min(running_events$Weight, na.rm = TRUE), 
+                     to = max(running_events$Weight, na.rm = TRUE), 
+                     by = 8) # Adjust the 'by' parameter as needed
+weight_labels <- paste(head(weight_breaks, -1), tail(weight_breaks, -1), sep = "-")
+
+
+# Now use these labels when you create the 'Weight_Category'
+running_events$Weight_Category <- cut(running_events$Weight, 
+                                      breaks = weight_breaks, 
+                                      labels = weight_labels, 
+                                      include.lowest = TRUE)
+
+y_breaks <- seq(0, max(running_events$Distance, na.rm = TRUE), by = 1500)
+
+ggplot(running_events, aes(x = Weight_Category, y = Distance, fill = Gender)) +
+  geom_bar(stat = "summary", fun = "mean", position = "dodge") + # Use 'position = dodge' to group by Gender
+  scale_fill_brewer(palette = "Pastel1") + # Choose a palette that offers good contrast between genders
+  theme_minimal() +
+  labs(x = "Weight Category (kg )", y = "Average Distance (m)",
+       title = "Lighter Athletes Tend to Run Longer Distances in Olympic Events") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1),
+        legend.title = element_blank()) + # Hide the legend title if you want
+  geom_text(aes(label = round(..y.., 0)), 
+            position = position_dodge(width = 0.9), # Adjust text labels to match the dodge width
+            stat = "summary", 
+            vjust = -0.5, 
+            fun = "mean") +
+ scale_y_continuous(breaks = y_breaks, labels = as.character(y_breaks)) +
+  coord_cartesian(ylim = c(0, max(running_events$Distance, na.rm = TRUE) * 1.1)) # Adjust Y-axis limit
+```
+
+
