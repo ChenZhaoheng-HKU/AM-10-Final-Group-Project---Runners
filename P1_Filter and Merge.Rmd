@@ -166,12 +166,11 @@ ggplot(running_events, aes(x = Height_Category, y = Distance, fill = Gender)) +
 
 ```{r}
 running_events$Weight_Category <- cut(running_events$Weight, 
-                                      breaks = seq(from = min(running_events$Weight, na.rm = TRUE), 
-                                                   to = max(running_events$Weight, na.rm = TRUE), 
-                                                   by = 5),  # Adjust the 'by' parameter as needed
-                                      include.lowest = TRUE)
-running_events <- running_events %>%
-  filter(!is.na(Weight_Category))
+              breaks = seq(from = min(running_events$Weight, 
+                                      na.rm = TRUE), 
+to = max(running_events$Weight, na.rm = TRUE), 
+                              by = 5),  # Adjust the 'by' parameter as needed
+                include.lowest = TRUE)
 
 
 weight_breaks <- seq(from = min(running_events$Weight, na.rm = TRUE), 
@@ -185,6 +184,8 @@ running_events$Weight_Category <- cut(running_events$Weight,
                                       breaks = weight_breaks, 
                                       labels = weight_labels, 
                                       include.lowest = TRUE)
+running_events <- running_events %>%
+  filter(!is.na(Weight_Category))
 
 y_breaks <- seq(0, max(running_events$Distance, na.rm = TRUE), by = 1500)
 
@@ -244,7 +245,14 @@ ggplot() +
   scale_fill_continuous(low = "white", high = "red", na.value = "grey", label = scales::percent) +
   theme_minimal() +
   theme(panel.grid = element_blank(), legend.position = "bottom") +
-  labs(fill = "Percentage of Total Medals", title = "Percentage of Short Distance Medals by Country")
+  labs(fill = "Percentage of Total Medals", title = "Percentage of Short Distance Medals by Country") + 
+  scale_fill_continuous(
+  low = "white", 
+  high = "red", 
+  na.value = "grey", 
+  labels = c("0%", "25%", "50%", "75%", "100%")
+)
+
 
 # Plot for long distance percentage
 ggplot() +
@@ -252,7 +260,13 @@ ggplot() +
   scale_fill_continuous(low = "white", high = "red", na.value = "grey", label = scales::percent) +
   theme_minimal() +
   theme(panel.grid = element_blank(), legend.position = "bottom") +
-  labs(fill = "Percentage of Total Medals", title = "Percentage of Long Distance Medals by Country")
+  labs(fill = "Percentage of Total Medals", title = "Percentage of Long Distance Medals by Country") + 
+  scale_fill_continuous(
+  low = "white", 
+  high = "red", 
+  na.value = "grey", 
+  labels = c("0%", "25%", "50%", "75%", "100%")
+)
 
 ```
 
