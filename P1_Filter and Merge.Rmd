@@ -331,11 +331,25 @@ avg_BMI_overtime <- selected_events %>%
             Avg_Height = mean(Height),
             Avg_Weight = mean(Weight))
 
-# Plot for weight <- ***Bjorn votes for this****
+# Define color scheme for distances
+distance_colors <- c(
+  '100' = '#E69F00',    # Orange
+  '200' = '#56B4E9',    # Sky Blue
+  '800' = '#009E73',    # Green
+  '1500' = '#F0E442',   # Yellow
+  '10000' = '#0072B2',  # Blue
+  '42195' = '#D55E00'   # Red
+)
+
+# Ensure that 'Distance' is a character to match the names in 'distance_colors'
+selected_events$Distance <- as.character(selected_events$Distance)
+
+# Plot for weight
 ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_Weight, color = Distance)) +
   geom_point() +
   geom_smooth(se = FALSE) +
   labs(title = "Average Male Weight Over Time by Distance", x = "Year", y = "Average Weight") +
+  scale_color_manual(values = distance_colors) + # Use manual color scale
   theme_minimal()
 
 # Plot for BMI
@@ -343,14 +357,15 @@ ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_BMI, color = Distance)) +
   geom_point() +
   geom_smooth(se = FALSE) +
   labs(title = "Average Male BMI Over Time by Distance", x = "Year", y = "Average BMI") +
+  scale_color_manual(values = distance_colors) + # Use manual color scale
   theme_minimal()
 
 ```
 
 ```{r}
-# Performance improved over time?
+# Performance plot
 performance %>%
-  filter(Distance %in% c(100, 200, 800, 1500, 10000, 42195) &
+  filter(Distance %in% c('100', '200', '800', '1500', '10000', '42195') & # Make sure these are character
          Gender == "M" &
          Year != 1988 &
          Year != 1928) %>%
@@ -361,10 +376,11 @@ performance %>%
   geom_point() +
   geom_smooth(se = FALSE) +
   facet_wrap(~Distance, scales = "free_y") +
+  scale_color_manual(values = distance_colors) + # Use manual color scale
   labs(title = "Average Male Performance Over Time by Distance", x = "Year", y = "Average Time") +
   theme_minimal() +
   
-  #Modify theme elements
+  # Modify theme elements
   theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
         axis.text.y = element_text(size = 7),
         strip.text.x = element_text(size = 8),
@@ -372,9 +388,10 @@ performance %>%
         axis.title.y = element_text(size = 8),
         legend.position = "none") +
   
-  #Add a border to each panel and customize the background of the facet labels
+  # Add a border to each panel and customize the background of the facet labels
   theme(panel.border = element_rect(color = "black", fill = NA, size = 0.3)) +
   theme(strip.background = element_rect(fill = "gray", color = "black"))
+
 ```
 
 ```{r}
