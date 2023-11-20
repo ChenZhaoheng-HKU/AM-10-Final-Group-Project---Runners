@@ -25,6 +25,9 @@ library(vroom)
 library(mice) 
 library(VIM)
 library(stringr)
+library(maps)
+library(rworldmap)
+library(sf)
 ```
 ## R Markdown
 
@@ -84,7 +87,10 @@ convert_time <- function(time_str) {
   # Split the time string by ':'
   parts <- strsplit(time_str, ":")[[1]]
   # Convert to time
-  if (length(parts) == 2) {
+  if (length(parts) == 3) {
+    return(as.numeric(parts[[1]]) * 3600 + as.numeric(parts[[2]]) * 60 + as.numeric(parts[[3]]))
+  }
+  else if (length(parts) == 2) {
     return(as.numeric(parts[[1]]) * 60 + as.numeric(parts[[2]]))
   } else {
     return(as.numeric(parts[[1]]))
@@ -93,10 +99,13 @@ convert_time <- function(time_str) {
 
 # 3. Extract Distance from 'Event'
 extract_distance <- function(event_str) {
-  # Extract the first number from the string
-  as.numeric(str_extract(event_str, "\\d+"))
+  # If the event contains "marathon", return 42195
+  if (grepl("marathon", tolower(event_str))) {
+    return(42195)
+  }
+  # Otherwise, extract the first number from the string
+  as.numeric(stringr::str_extract(event_str, "\\d+"))
 }
-
 ```
 
 ```{r}
@@ -192,5 +201,77 @@ ggplot(running_events, aes(x = Weight_Category, y = Distance, fill = Gender)) +
  scale_y_continuous(breaks = y_breaks, labels = as.character(y_breaks)) +
   coord_cartesian(ylim = c(0, max(running_events$Distance, na.rm = TRUE) * 1.1)) # Adjust Y-axis limit
 ```
+## Geographical distribution
+```{r}
+medal_count <- results %>%
+  mutate(Race_Type = ifelse(grepl("\\b(100M|200M|400M) (Men|Women)\\b", Event), "Short", 
+                     ifelse(grepl("\\b(800M|1500M|5000M|10000M|Marathon) (Men|Women)\\b", Event), "Long", NA))) %>%
+  
+  filter(!is.na(Race_Type)) %>%
+  
+  group_by(Nationality, Race_Type) %>%
+  
+  summarise(Medal_count = n()) %>%
+  
+  pivot_wider(names_from = Race_Type, values_from = Medal_count, names_prefix = "Medal_count_") %>%
+  
+  replace_na(list(Medal_count_Short = 0, Medal_count_Long = 0)) %>%
+  
+  mutate(Medal_count_Total = Medal_count_Short + Medal_count_Long)
+```
+
+```{r}
+world_map <- getMap()
+world_map_sf <- st_as_sf(world_map)
+world_map_sf <- left_join(world_map_sf, medal_count, by = c("ISO_A3" = "Nationality"))
+
+ggplot() +
+  geom_sf(data = world_map_sf, aes(fill = Medal_count_Short)) +
+  scale_fill_continuous(low = "white", high = "red", na.value = "grey") +
+  theme_minimal() +
+  theme(panel.grid = element_blank(), legend.position = "bottom") +
+  labs(fill = "Number of Medals", title = "Distribution of Medals: Short running in the World")
+
+ggplot() +
+  geom_sf(data = world_map_sf, aes(fill = Medal_count_Long)) +
+  scale_fill_continuous(low = "white", high = "red", na.value = "grey") +
+  theme_minimal() +
+  theme(panel.grid = element_blank(), legend.position = "bottom") +
+  labs(fill = "Number of Medals", title = "Distribution of Medals: Long running in the World")
+
+ggplot() +
+  geom_sf(data = world_map_sf, aes(fill = Medal_count_Total)) +
+  scale_fill_continuous(low = "white", high = "red", na.value = "grey") +
+  theme_minimal() +
+  theme(panel.grid = element_blank(), legend.position = "bottom") +
+  labs(fill = "Number of Medals", title = "Distribution of Medals in the World")
+```
+## Gender differences
+```{r}
+performance <- results %>%
+  mutate(Race_Type = ifelse(grepl("\\b(100M|200M|400M) (Men|Women)\\b", Event), "Short", 
+                     ifelse(grepl("\\b(800M|1500M|5000M|10000M|Marathon) (Men|Women)\\b", Event), "Long", NA))) %>%
+  filter(!is.na(Race_Type), !Result %in% c("None"))
+
+performance$Result <- gsub("h|-", ":", performance$Result)
+performance$Time <- sapply(performance$Result, convert_time)
+performance$Distance <- sapply(performance$Event, extract_distance)
+```
 
 
+```{r}
+avg_times <- performance %>%
+  group_by(Gender, Distance) %>%
+  summarise(avg_time = mean(Time, na.rm = TRUE))
+
+avg_times <- avg_times %>%
+  group_by(Distance) %>%
+  mutate(percent_diff = (avg_time - lag(avg_time)) / lag(avg_time) * 100)
+
+ggplot(avg_times, aes(x = Distance, y = avg_time, fill = Gender)) +
+  geom_col(position = "dodge") +
+  geom_line(aes(y = percent_diff, group = 1), color = "red") +
+  coord_flip() +
+  labs(x = "Event", y = "Average Time") +
+  theme_minimal()
+```
