@@ -256,22 +256,147 @@ performance <- results %>%
 performance$Result <- gsub("h|-", ":", performance$Result)
 performance$Time <- sapply(performance$Result, convert_time)
 performance$Distance <- sapply(performance$Event, extract_distance)
+performance$Distance <- factor(performance$Distance,
+                               levels =  sort(unique(performance$Distance), decreasing = TRUE))
 ```
 
 
 ```{r}
+# Difference
 avg_times <- performance %>%
-  group_by(Gender, Distance) %>%
-  summarise(avg_time = mean(Time, na.rm = TRUE))
+  filter(Year >= 1984) %>%
+  group_by(Year, Gender, Race_Type) %>%
+  summarise(avg_time = mean(Time, na.rm = TRUE)) %>%
+  spread(Gender, avg_time) %>%
+  mutate(diff_pct = abs(W - M) / M * 100) %>%
+  gather(Gender, avg_time, M, W, factor_key=TRUE)
 
-avg_times <- avg_times %>%
-  group_by(Distance) %>%
-  mutate(percent_diff = (avg_time - lag(avg_time)) / lag(avg_time) * 100)
+# Plot the differences
+ggplot(avg_times, aes(x = Year, y = diff_pct, color = Race_Type)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  #facet_wrap(~ Race_Type, scales = "free_y") +
+  labs(title = "% Difference in Average Time between Male and Female athletes",
+       x = "Year", 
+       y = "% Difference in Average Time", color = "Race Type") +
+  theme_minimal()
 
-ggplot(avg_times, aes(x = Distance, y = avg_time, fill = Gender)) +
-  geom_col(position = "dodge") +
-  geom_line(aes(y = percent_diff, group = 1), color = "red") +
-  coord_flip() +
-  labs(x = "Event", y = "Average Time") +
+```
+# BMI and weight distribution overtime
+```{r}
+athlete_events$Event <- gsub(",", "", athlete_events$Event)
+
+events_to_select <- c("100 metres", "200 metres", "800 metres", "1500 metres", "10000 metres", "Marathon")
+
+selected_events <- athlete_events %>%
+  filter(sapply(Event, function(x) any(sapply(events_to_select, function(y) grepl(y, x)))) &
+         !grepl("Relay", Event) & 
+         !grepl("Hurdles", Event) &
+         !grepl("Steeplechase",Event) &
+         Sex == "M") %>%
+  mutate(BMI = Weight / (Height/100)^2)
+
+selected_events$Distance <- sapply(selected_events$Event, extract_distance)
+selected_events$Distance <- factor(selected_events$Distance)
+
+avg_BMI_overtime <- selected_events %>%
+  group_by(Year, Distance) %>%
+  summarise(Avg_BMI = mean(BMI, na.rm = TRUE),
+            Avg_Height = mean(Height),
+            Avg_Weight = mean(Weight))
+
+# Plot for weight <- ***Bjorn votes for this****
+ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_Weight, color = Distance)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(title = "Average Male Weight Over Time by Distance", x = "Year", y = "Average Weight") +
+  theme_minimal()
+
+# Plot for BMI
+ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_BMI, color = Distance)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(title = "Average Male BMI Over Time by Distance", x = "Year", y = "Average BMI") +
+  theme_minimal()
+
+```
+```{r}
+# Performance improved over time?
+performance %>%
+  filter(Distance %in% c(100, 200, 800, 1500, 10000, 42195) &
+         Gender == "M" &
+         Year != 1988 &
+         Year != 1928) %>%
+  group_by(Year, Distance) %>%
+  summarise(avg_time = mean(Time, na.rm = TRUE)) %>%
+  
+  ggplot(aes(x = Year, y = avg_time, color = Distance)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~Distance, scales = "free_y") +
+  labs(title = "Average Male Performance Over Time by Distance", x = "Year", y = "Average Time") +
+  theme_minimal() +
+  
+  #Modify theme elements
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        axis.text.y = element_text(size = 7),
+        strip.text.x = element_text(size = 8),
+        axis.title.x = element_text(size = 8),
+        axis.title.y = element_text(size = 8),
+        legend.position = "none") +
+  
+  #Add a border to each panel and customize the background of the facet labels
+  theme(panel.border = element_rect(color = "black", fill = NA, size = 0.3)) +
+  theme(strip.background = element_rect(fill = "gray", color = "black"))
+```
+```{r}
+# % of improvement: male, overtime <- This one is useless
+performance %>%
+  filter(Distance %in% c(100, 200, 800, 1500, 10000, 42195) &
+         Gender == "M" &
+         Year != 1988 &
+         Year != 1928) %>%
+  group_by(Distance, Year) %>%
+  summarise(avg_time = mean(Time, na.rm = TRUE)) %>%
+  mutate(time_improvement = (lag(avg_time) - avg_time) / lag(avg_time) * 100) %>%
+  
+  ggplot(aes(x = Year, y = time_improvement, color = Distance)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(title = "Year-over-year Improvement Percentage in Average Male Performance by Distance",
+       x = "Year", y = "Average Time Improvement (%)") +
   theme_minimal()
 ```
+
+```{r}
+# This is a test to see women BMI or Weight overtime, not meaningful
+athlete_events$Event <- gsub(",", "", athlete_events$Event)
+
+events_to_select <- c("100 metres", "200 metres", "800 metres", "1500 metres", "10000 metres", "Marathon")
+
+selected_events <- athlete_events %>%
+  filter(sapply(Event, function(x) any(sapply(events_to_select, function(y) grepl(y, x)))) &
+         !grepl("Relay", Event) & 
+         !grepl("Hurdles", Event) &
+         !grepl("Steeplechase",Event) &
+         Sex == "F" &
+         Year >= 1984 ) %>%
+  mutate(BMI = Weight / (Height/100)^2)
+
+selected_events$Distance <- sapply(selected_events$Event, extract_distance)
+selected_events$Distance <- factor(selected_events$Distance)
+
+avg_BMI_overtime <- selected_events %>%
+  group_by(Year, Distance) %>%
+  summarise(Avg_BMI = mean(BMI, na.rm = TRUE),
+            Avg_Height = mean(Height),
+            Avg_Weight = mean(Weight))
+
+
+ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_Weight, color = Distance)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  labs(title = "Average Female Weight Over Time by Distance", x = "Year", y = "Average BMI") +
+  theme_minimal()
+```
+
