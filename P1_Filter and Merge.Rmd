@@ -29,6 +29,7 @@ library(maps)
 library(rworldmap)
 library(sf)
 ```
+
 ## R Markdown
 
 This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
@@ -119,6 +120,7 @@ running_events$Distance <- sapply(running_events$Event.x, extract_distance)
 # Display the first few rows of the cleaned data
 head(running_events)
 ```
+
 ```{r}
 # Preparing for plotting
 running_events$Height_Category <- cut(running_events$Height, 
@@ -161,6 +163,7 @@ ggplot(running_events, aes(x = Height_Category, y = Distance, fill = Gender)) +
   coord_cartesian(ylim = c(0, max(running_events$Distance, na.rm = TRUE) * 1.1))
 
 ```
+
 ```{r}
 running_events$Weight_Category <- cut(running_events$Weight, 
                                       breaks = seq(from = min(running_events$Weight, na.rm = TRUE), 
@@ -201,7 +204,9 @@ ggplot(running_events, aes(x = Weight_Category, y = Distance, fill = Gender)) +
  scale_y_continuous(breaks = y_breaks, labels = as.character(y_breaks)) +
   coord_cartesian(ylim = c(0, max(running_events$Distance, na.rm = TRUE) * 1.1)) # Adjust Y-axis limit
 ```
+
 ## Geographical distribution
+
 ```{r}
 medal_count <- results %>%
   mutate(Race_Type = ifelse(grepl("\\b(100M|200M|400M) (Men|Women)\\b", Event), "Short", 
@@ -218,35 +223,41 @@ medal_count <- results %>%
   replace_na(list(Medal_count_Short = 0, Medal_count_Long = 0)) %>%
   
   mutate(Medal_count_Total = Medal_count_Short + Medal_count_Long)
-```
 
-```{r}
+# Update the existing medal_count dataframe with percentage calculations
+medal_count <- medal_count %>%
+  mutate(
+    medal_percent_short = ifelse(Medal_count_Total > 0, Medal_count_Short / Medal_count_Total * 100, 0),
+    Medal_percent_Long = ifelse(Medal_count_Total > 0, Medal_count_Long / Medal_count_Total * 100, 0))
+
 world_map <- getMap()
 world_map_sf <- st_as_sf(world_map)
 world_map_sf <- left_join(world_map_sf, medal_count, by = c("ISO_A3" = "Nationality"))
 
-ggplot() +
-  geom_sf(data = world_map_sf, aes(fill = Medal_count_Short)) +
-  scale_fill_continuous(low = "white", high = "red", na.value = "grey") +
-  theme_minimal() +
-  theme(panel.grid = element_blank(), legend.position = "bottom") +
-  labs(fill = "Number of Medals", title = "Distribution of Medals: Short running in the World")
-
-ggplot() +
-  geom_sf(data = world_map_sf, aes(fill = Medal_count_Long)) +
-  scale_fill_continuous(low = "white", high = "red", na.value = "grey") +
-  theme_minimal() +
-  theme(panel.grid = element_blank(), legend.position = "bottom") +
-  labs(fill = "Number of Medals", title = "Distribution of Medals: Long running in the World")
-
-ggplot() +
-  geom_sf(data = world_map_sf, aes(fill = Medal_count_Total)) +
-  scale_fill_continuous(low = "white", high = "red", na.value = "grey") +
-  theme_minimal() +
-  theme(panel.grid = element_blank(), legend.position = "bottom") +
-  labs(fill = "Number of Medals", title = "Distribution of Medals in the World")
 ```
+
+```{r}
+# Assuming world_map_sf is already properly joined with medal_count
+# Plot for short distance percentage
+ggplot() +
+  geom_sf(data = world_map_sf, aes(fill = medal_percent_short)) +
+  scale_fill_continuous(low = "white", high = "red", na.value = "grey", label = scales::percent) +
+  theme_minimal() +
+  theme(panel.grid = element_blank(), legend.position = "bottom") +
+  labs(fill = "Percentage of Total Medals", title = "Percentage of Short Distance Medals by Country")
+
+# Plot for long distance percentage
+ggplot() +
+  geom_sf(data = world_map_sf, aes(fill = Medal_percent_Long)) +
+  scale_fill_continuous(low = "white", high = "red", na.value = "grey", label = scales::percent) +
+  theme_minimal() +
+  theme(panel.grid = element_blank(), legend.position = "bottom") +
+  labs(fill = "Percentage of Total Medals", title = "Percentage of Long Distance Medals by Country")
+
+```
+
 ## Gender differences
+
 ```{r}
 performance <- results %>%
   mutate(Race_Type = ifelse(grepl("\\b(100M|200M|400M) (Men|Women)\\b", Event), "Short", 
@@ -259,7 +270,6 @@ performance$Distance <- sapply(performance$Event, extract_distance)
 performance$Distance <- factor(performance$Distance,
                                levels =  sort(unique(performance$Distance), decreasing = TRUE))
 ```
-
 
 ```{r}
 # Difference
@@ -282,7 +292,9 @@ ggplot(avg_times, aes(x = Year, y = diff_pct, color = Race_Type)) +
   theme_minimal()
 
 ```
+
 # BMI and weight distribution overtime
+
 ```{r}
 athlete_events$Event <- gsub(",", "", athlete_events$Event)
 
@@ -320,6 +332,7 @@ ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_BMI, color = Distance)) +
   theme_minimal()
 
 ```
+
 ```{r}
 # Performance improved over time?
 performance %>%
@@ -349,6 +362,7 @@ performance %>%
   theme(panel.border = element_rect(color = "black", fill = NA, size = 0.3)) +
   theme(strip.background = element_rect(fill = "gray", color = "black"))
 ```
+
 ```{r}
 # % of improvement: male, overtime <- This one is useless
 performance %>%
@@ -399,4 +413,3 @@ ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_Weight, color = Distance))
   labs(title = "Average Female Weight Over Time by Distance", x = "Year", y = "Average BMI") +
   theme_minimal()
 ```
-
