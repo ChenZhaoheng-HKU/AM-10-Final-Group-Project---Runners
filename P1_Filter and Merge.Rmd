@@ -28,6 +28,7 @@ library(stringr)
 library(maps)
 library(rworldmap)
 library(sf)
+library(scales)
 ```
 
 ## R Markdown
@@ -75,12 +76,6 @@ results$first_name<- tolower(results$first_name)
 athlete_events$first_name <- tolower(athlete_events$first_name)
 ```
 
-```{r}
-# Merge the data frames on 'Name' 'Medal' and 'Year'
-combined_df <- results %>%
-  left_join(athlete_events, by = c("first_name", "Medal", "Year")) %>%
-  filter(!is.na(ID))
-```
 
 ```{r}
 # 2. Convert 'Results' to Time Format
@@ -109,33 +104,42 @@ extract_distance <- function(event_str) {
 }
 ```
 
-```{r}
-running_events <- combined_df %>% 
-  filter(grepl("M Men|M Women", Event.x), 
-         !is.na(ID)) # Adjust the pattern as needed
 
-running_events$Time <- sapply(running_events$Result, convert_time)
-running_events$Distance <- sapply(running_events$Event.x, extract_distance)
+```{r test}
+# cleaning 
+athlete_events$Event <- gsub(",", "", athlete_events$Event)
 
-# Display the first few rows of the cleaned data
-head(running_events)
+events_to_select <- c("100 metres", "200 metres", "800 metres", "1500 metres", "10000 metres", "Marathon")
+
+selected_events <- athlete_events %>%
+  filter(sapply(Event, function(x) any(sapply(events_to_select, function(y) grepl(y, x)))) &
+         !grepl("Relay", Event) & 
+         !grepl("Hurdles", Event) &
+         !grepl("Steeplechase",Event)) %>%
+  mutate(BMI = Weight / (Height/100)^2)
+
+selected_events$Distance <- sapply(selected_events$Event, extract_distance)
+selected_events$Distance <- as.numeric(selected_events$Distance)
+
+running_events <- selected_events
+
 ```
 
 ```{r}
 # Preparing for plotting
+
 running_events$Height_Category <- cut(running_events$Height, 
                                       breaks = seq(from = min(running_events$Height, na.rm = TRUE), 
                                                    to = max(running_events$Height, na.rm = TRUE), 
                                                    by = 5), 
                                       include.lowest = TRUE)
-
-running_events<- running_events %>%
+running_events <- running_events %>%
   drop_na(Height_Category) %>%
   filter(Height_Category != "NA") # Replace NA with actual NA representation in data
 
 height_breaks <- seq(from = min(running_events$Height, na.rm = TRUE), 
                      to = max(running_events$Height, na.rm = TRUE), 
-                     by = 5) # Adjust the 'by' parameter as needed
+                     by = 6) # Adjust the 'by' parameter as needed
 height_labels <- paste(head(height_breaks, -1), tail(height_breaks, -1), sep = "-")
 
 # Now use these labels when you create the 'Height_Category'
@@ -144,66 +148,98 @@ running_events$Height_Category <- cut(running_events$Height,
                                       labels = height_labels, 
                                       include.lowest = TRUE)
 
-y_breaks <- seq(0, 7000, by = 1500)
-  
-ggplot(running_events, aes(x = Height_Category, y = Distance, fill = Gender)) +
-  geom_bar(stat = "summary", fun = "mean", position = "dodge") +
-  scale_fill_brewer(palette = "Pastel1") +
-  theme_minimal() +
-  labs(x = "Height Category (cm)", y = "Average Distance (m)",
-       title = "Taller athletes tend to run shorter distances in Olympic Events") +
-  theme(axis.text.x = element_text(angle = 0, hjust = 1),
-        legend.title = element_blank()) +
-  geom_text(aes(label = round(..y.., 0)),  # Round to the nearest whole number
-            position = position_dodge(width = 0.9),
-            stat = "summary", 
-            vjust = -0.5, 
-            fun = "mean") +
-  scale_y_continuous(breaks = y_breaks, labels = as.character(y_breaks)) +
-  coord_cartesian(ylim = c(0, max(running_events$Distance, na.rm = TRUE) * 1.1))
+y_breaks <- seq(0, max(running_events$Distance, na.rm = TRUE), by = 5000)
 
+# Ensure that all combinations of Height_Category and Sex are present
+running_events_complete <- running_events %>%
+  group_by(Height_Category, Sex) %>%
+  summarize(Distance = mean(Distance, na.rm = TRUE), .groups = 'keep') %>%
+  ungroup() %>%
+  complete(Height_Category, Sex, fill = list(Distance = 0.00001))
+
+running_events_complete <- running_events_complete %>%
+  filter(!is.na(Height_Category))
+
+# Now, plot using this new data frame
+p <- ggplot(running_events_complete, aes(x = Height_Category, y = Distance, fill = Sex)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("M" = '#b6cde4', "F" = "#f5b4ad")) +
+  labs(x = "Height Category (cm)", y = "Average Distance (m)",
+       title = "Taller Athletes Tend to Run Shorter Distances in Olympic Events") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5), # Center the labels under the bars
+    legend.title = element_blank(),
+    panel.grid.major = element_blank(),  # Remove major gridlines
+    panel.grid.minor = element_blank(),  # Remove minor gridlines
+    panel.background = element_blank()   # Remove panel background
+  ) +
+  scale_y_continuous(breaks = y_breaks, labels = as.character(y_breaks)) +
+  coord_cartesian(ylim = c(0, max(running_events_complete$Distance, na.rm = TRUE)*1.1))
+
+# Save the plot without the labels on the bars
+ggsave("height_dis.png", plot = p, width = 6, height = 4, dpi = 300)
+
+# Print the plot
+print(p)
 ```
 
+
+
 ```{r}
-running_events$Weight_Category <- cut(running_events$Weight, 
-              breaks = seq(from = min(running_events$Weight, 
-                                      na.rm = TRUE), 
-to = max(running_events$Weight, na.rm = TRUE), 
-                              by = 5),  # Adjust the 'by' parameter as needed
-                include.lowest = TRUE)
-
-
+# Prepare the breaks and labels for Weight Category
 weight_breaks <- seq(from = min(running_events$Weight, na.rm = TRUE), 
-                     to = max(running_events$Weight, na.rm = TRUE), 
-                     by = 8) # Adjust the 'by' parameter as needed
+                     to = max(running_events$Weight, na.rm = TRUE) , 
+                     by = 7) 
 weight_labels <- paste(head(weight_breaks, -1), tail(weight_breaks, -1), sep = "-")
 
+# Ensure there are no NA values in Weight before cutting into categories
+running_events <- running_events %>%
+  filter(!is.na(Weight))
 
-# Now use these labels when you create the 'Weight_Category'
+# Cut the Weight into categories
 running_events$Weight_Category <- cut(running_events$Weight, 
                                       breaks = weight_breaks, 
                                       labels = weight_labels, 
                                       include.lowest = TRUE)
+
+# Ensure there are no NA values in Weight Category
 running_events <- running_events %>%
   filter(!is.na(Weight_Category))
 
-y_breaks <- seq(0, max(running_events$Distance, na.rm = TRUE), by = 1500)
+# Complete the dataset to make sure every category has both sexes
+running_events_complete <- running_events %>%
+  group_by(Weight_Category, Sex) %>%
+  summarize(Distance = mean(Distance, na.rm = TRUE), .groups = 'keep') %>%
+  ungroup() %>%
+  complete(Weight_Category, Sex, fill = list(Distance = 0.00001))
 
-ggplot(running_events, aes(x = Weight_Category, y = Distance, fill = Gender)) +
-  geom_bar(stat = "summary", fun = "mean", position = "dodge") + # Use 'position = dodge' to group by Gender
-  scale_fill_brewer(palette = "Pastel1") + # Choose a palette that offers good contrast between genders
-  theme_minimal() +
-  labs(x = "Weight Category (kg )", y = "Average Distance (m)",
+# Define breaks for the Y axis based on Distance
+y_breaks <- seq(0, max(running_events_complete$Distance, na.rm = TRUE), by = 5000)
+
+# Create the plot
+p <- ggplot(running_events_complete, aes(x = Weight_Category, y = Distance, fill = Sex)) +
+  geom_bar(stat = "identity", position = "dodge") + # Switch to identity as we now have complete data
+  scale_fill_manual(values = c("M" = '#b6cde4', "F" = "#f5b4ad")) +
+  labs(x = "Weight Category (kg)", y = "Average Distance (m)",
        title = "Lighter Athletes Tend to Run Longer Distances in Olympic Events") +
-  theme(axis.text.x = element_text(angle = 0, hjust = 1),
-        legend.title = element_blank()) + # Hide the legend title if you want
-  geom_text(aes(label = round(..y.., 0)), 
-            position = position_dodge(width = 0.9), # Adjust text labels to match the dodge width
-            stat = "summary", 
-            vjust = -0.5, 
-            fun = "mean") +
- scale_y_continuous(breaks = y_breaks, labels = as.character(y_breaks)) +
-  coord_cartesian(ylim = c(0, max(running_events$Distance, na.rm = TRUE) * 1.1)) # Adjust Y-axis limit
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5), # Center the labels under the bars
+    legend.title = element_blank(),
+    panel.grid.major = element_blank(),  # Remove major gridlines
+    panel.grid.minor = element_blank(),  # Remove minor gridlines
+    panel.background = element_blank()   # Remove panel background
+  ) +
+  scale_y_continuous(breaks = y_breaks, labels = as.character(y_breaks)) +
+  coord_cartesian(ylim = c(0, max(running_events_complete$Distance, na.rm = TRUE) * 1.1))
+
+# Save the plot
+ggsave("weight_dis.png", plot = p, width = 6, height = 4, dpi = 300)
+
+# Print the plot
+print(p)
+
 ```
 
 ## Geographical distribution
@@ -240,12 +276,12 @@ world_map_sf <- left_join(world_map_sf, medal_count, by = c("ISO_A3" = "National
 ```{r}
 # Assuming world_map_sf is already properly joined with medal_count
 # Plot for short distance percentage
-ggplot() +
+p = ggplot() +
   geom_sf(data = world_map_sf, aes(fill = medal_percent_short)) +
   scale_fill_continuous(low = "white", high = "red", na.value = "grey", label = scales::percent) +
   theme_minimal() +
   theme(panel.grid = element_blank(), legend.position = "bottom") +
-  labs(fill = "Percentage of Total Medals", title = "Percentage of Short Distance Medals by Country") + 
+  labs(fill = "Percentage of Country Medals", title = "Percentage of Short Distance Medals by Country") + 
   scale_fill_continuous(
   low = "white", 
   high = "red", 
@@ -255,19 +291,22 @@ ggplot() +
 
 
 # Plot for long distance percentage
-ggplot() +
+q = ggplot() +
   geom_sf(data = world_map_sf, aes(fill = Medal_percent_Long)) +
   scale_fill_continuous(low = "white", high = "red", na.value = "grey", label = scales::percent) +
   theme_minimal() +
   theme(panel.grid = element_blank(), legend.position = "bottom") +
-  labs(fill = "Percentage of Total Medals", title = "Percentage of Long Distance Medals by Country") + 
+  labs(fill = "Percentage of Country Medals", title = "Percentage of Long Distance Medals by Country") + 
   scale_fill_continuous(
   low = "white", 
   high = "red", 
   na.value = "grey", 
   labels = c("0%", "25%", "50%", "75%", "100%")
 )
-
+ggsave("short_map.png", plot = p, width = 6, height = 4, dpi = 300)
+ggsave("long_map.png", plot = q, width = 6, height = 4, dpi = 300)
+print(p)
+print(q)
 ```
 
 ## Gender differences
@@ -283,29 +322,10 @@ performance$Time <- sapply(performance$Result, convert_time)
 performance$Distance <- sapply(performance$Event, extract_distance)
 performance$Distance <- factor(performance$Distance,
                                levels =  sort(unique(performance$Distance), decreasing = TRUE))
-```
 
-```{r}
-# Difference
-avg_times <- performance %>%
-  filter(Year >= 1984) %>%
-  group_by(Year, Gender, Race_Type) %>%
-  summarise(avg_time = mean(Time, na.rm = TRUE)) %>%
-  spread(Gender, avg_time) %>%
-  mutate(diff_pct = abs(W - M) / M * 100) %>%
-  gather(Gender, avg_time, M, W, factor_key=TRUE)
-
-# Plot the differences
-ggplot(avg_times, aes(x = Year, y = diff_pct, color = Race_Type)) +
-  geom_point() +
-  geom_smooth(se = FALSE) +
-  #facet_wrap(~ Race_Type, scales = "free_y") +
-  labs(title = "% Difference in Average Time between Male and Female athletes",
-       x = "Year", 
-       y = "% Difference in Average Time", color = "Race Type") +
-  theme_minimal()
 
 ```
+
 
 # BMI and weight distribution overtime
 
@@ -345,102 +365,93 @@ distance_colors <- c(
 selected_events$Distance <- as.character(selected_events$Distance)
 
 # Plot for weight
-ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_Weight, color = Distance)) +
+p <- ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_Weight, color = Distance)) +
   geom_point() +
   geom_smooth(se = FALSE) +
-  labs(title = "Average Male Weight Over Time by Distance", x = "Year", y = "Average Weight") +
-  scale_color_manual(values = distance_colors) + # Use manual color scale
+  labs(title = "Average Male Weight Over Time by Distance", x = "Year", y = "Average Weight (kg)") +
+  scale_color_manual(values = distance_colors,
+                     labels = c('100m', '200m', '800m', '1500m', '10000m', 'Marathon')) + # Use manual color scale
   theme_minimal()
 
 # Plot for BMI
-ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_BMI, color = Distance)) +
+q <- ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_BMI, color = Distance)) +
   geom_point() +
   geom_smooth(se = FALSE) +
   labs(title = "Average Male BMI Over Time by Distance", x = "Year", y = "Average BMI") +
-  scale_color_manual(values = distance_colors) + # Use manual color scale
+  scale_color_manual(values = distance_colors,
+                     labels = c('100m', '200m', '800m', '1500m', '10000m', 'Marathon')) + # Use manual color scale
   theme_minimal()
+# Save the plot
+ggsave("weight.png", plot = p, width = 6, height = 4, dpi = 300)
+# Save the plot
+ggsave("BMI.png", plot = q, width = 6, height = 4, dpi = 300)
+
+# Print the plot
+print(p)
+print(q)
 
 ```
 
+
+
 ```{r}
-# Performance plot
-performance %>%
-  filter(Distance %in% c('100', '200', '800', '1500', '10000', '42195') & # Make sure these are character
+# Calculate the baseline time for each distance as the slowest time in the first year recorded
+baseline_times <- performance %>%
+  filter(Distance %in% c('100', '200', '800', '1500', '10000', '42195') & Gender == "M") %>%
+  group_by(Distance) %>%
+  summarise(baseline_time = max(Time, na.rm = TRUE))  # Use the slowest time as baseline
+
+# Join the baseline times with the performance data and calculate percentage change
+performance <- performance %>%
+  left_join(baseline_times, by = "Distance") %>%
+  mutate(percentage_change = (baseline_time - Time) / baseline_time * 100)
+
+# Filter and summarize for the plot
+performance_plot_data <- performance %>%
+  filter(Distance %in% c('100', '200', '800', '1500', '10000', '42195') &
          Gender == "M" &
          Year != 1988 &
          Year != 1928) %>%
   group_by(Year, Distance) %>%
-  summarise(avg_time = mean(Time, na.rm = TRUE)) %>%
-  
-  ggplot(aes(x = Year, y = avg_time, color = Distance)) +
+  summarise(avg_percentage_change = mean(percentage_change, na.rm = TRUE))
+
+# Determine a common scale for all plots
+common_scale <- range(performance_plot_data$avg_percentage_change, na.rm = TRUE)
+
+# Plot the performance improvement
+p <- ggplot(performance_plot_data, aes(x = Year, y = avg_percentage_change, color = Distance)) +
   geom_point() +
   geom_smooth(se = FALSE) +
-  facet_wrap(~Distance, scales = "free_y") +
-  scale_color_manual(values = distance_colors) + # Use manual color scale
-  labs(title = "Average Male Performance Over Time by Distance", x = "Year", y = "Average Time") +
+  facet_wrap(~Distance, scales = "fixed",  # Use fixed scales
+             labeller = labeller(
+               Distance = c('100' = '100m', 
+                            '200' = '200m', 
+                            '800' = '800m', 
+                            '1500' = '1500m', 
+                            '10000' = '10000m', 
+                            '42195' = 'Marathon'))) +
+  scale_color_manual(values = distance_colors) +
+  labs(title = "Average Male Performance Improvement Over Time by Distance",
+       x = "Year", y = "Average Percentage Improvement") +
+  scale_y_continuous(labels = label_number(suffix = "%"), limits = common_scale) +  # Format Y-axis labels as percentages and set common Y-axis scale
   theme_minimal() +
-  
   # Modify theme elements
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+  theme(axis.text.x = element_text(angle = 0, hjust = 1, size = 7),
         axis.text.y = element_text(size = 7),
         strip.text.x = element_text(size = 8),
         axis.title.x = element_text(size = 8),
         axis.title.y = element_text(size = 8),
         legend.position = "none") +
   
-  # Add a border to each panel and customize the background of the facet labels
-  theme(panel.border = element_rect(color = "black", fill = NA, size = 0.3)) +
-  theme(strip.background = element_rect(fill = "gray", color = "black"))
+  # Customize the background of the facet labels
+  theme(panel.border = element_rect(color = "black", fill = NA, size = 0.3),
+        strip.background = element_rect(fill = "gray", color = "black"))
+
+# Save the plot
+ggsave("improvement_time.png", plot = p, width = 6, height = 4, dpi = 300)
+
+# Print the plot
+print(p)
 
 ```
 
-```{r}
-# % of improvement: male, overtime <- This one is useless
-performance %>%
-  filter(Distance %in% c(100, 200, 800, 1500, 10000, 42195) &
-         Gender == "M" &
-         Year != 1988 &
-         Year != 1928) %>%
-  group_by(Distance, Year) %>%
-  summarise(avg_time = mean(Time, na.rm = TRUE)) %>%
-  mutate(time_improvement = (lag(avg_time) - avg_time) / lag(avg_time) * 100) %>%
-  
-  ggplot(aes(x = Year, y = time_improvement, color = Distance)) +
-  geom_point() +
-  geom_smooth(se = FALSE) +
-  labs(title = "Year-over-year Improvement Percentage in Average Male Performance by Distance",
-       x = "Year", y = "Average Time Improvement (%)") +
-  theme_minimal()
-```
-
-```{r}
-# This is a test to see women BMI or Weight overtime, not meaningful
-athlete_events$Event <- gsub(",", "", athlete_events$Event)
-
-events_to_select <- c("100 metres", "200 metres", "800 metres", "1500 metres", "10000 metres", "Marathon")
-
-selected_events <- athlete_events %>%
-  filter(sapply(Event, function(x) any(sapply(events_to_select, function(y) grepl(y, x)))) &
-         !grepl("Relay", Event) & 
-         !grepl("Hurdles", Event) &
-         !grepl("Steeplechase",Event) &
-         Sex == "F" &
-         Year >= 1984 ) %>%
-  mutate(BMI = Weight / (Height/100)^2)
-
-selected_events$Distance <- sapply(selected_events$Event, extract_distance)
-selected_events$Distance <- factor(selected_events$Distance)
-
-avg_BMI_overtime <- selected_events %>%
-  group_by(Year, Distance) %>%
-  summarise(Avg_BMI = mean(BMI, na.rm = TRUE),
-            Avg_Height = mean(Height),
-            Avg_Weight = mean(Weight))
-
-
-ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_Weight, color = Distance)) +
-  geom_point() +
-  geom_smooth(se = FALSE) +
-  labs(title = "Average Female Weight Over Time by Distance", x = "Year", y = "Average BMI") +
-  theme_minimal()
-```
