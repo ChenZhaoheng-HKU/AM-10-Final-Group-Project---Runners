@@ -368,7 +368,7 @@ selected_events$Distance <- as.character(selected_events$Distance)
 p <- ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_Weight, color = Distance)) +
   geom_point() +
   geom_smooth(se = FALSE) +
-  labs(title = "Average Male Weight Over Time by Distance", x = "Year", y = "Average Weight (kg)") +
+  labs(title = "Male Weight Seems to Specialize for Each Distance", x = "Year", y = "Average Weight (kg)") +
   scale_color_manual(values = distance_colors,
                      labels = c('100m', '200m', '800m', '1500m', '10000m', 'Marathon')) + # Use manual color scale
   theme_minimal()
@@ -377,7 +377,7 @@ p <- ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_Weight, color = Dista
 q <- ggplot(data = avg_BMI_overtime, aes(x = Year, y = Avg_BMI, color = Distance)) +
   geom_point() +
   geom_smooth(se = FALSE) +
-  labs(title = "Average Male BMI Over Time by Distance", x = "Year", y = "Average BMI") +
+  labs(title = "Male BMI Seems to Cluster in Two Groups", x = "Year", y = "Average BMI") +
   scale_color_manual(values = distance_colors,
                      labels = c('100m', '200m', '800m', '1500m', '10000m', 'Marathon')) + # Use manual color scale
   theme_minimal()
